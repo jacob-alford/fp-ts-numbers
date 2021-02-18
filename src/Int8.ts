@@ -5,6 +5,7 @@ import * as B from 'fp-ts/Bounded'
 import * as F from 'fp-ts/Field'
 import { Semigroup } from 'fp-ts/Semigroup'
 import { Monoid } from 'fp-ts/Monoid'
+import { Show as ShowNumber } from 'fp-ts/number'
 
 /**
  * @category model
@@ -77,6 +78,14 @@ export const Field: F.Field<Int8> = {
   degree: () => 1,
   div: (second) => (first) => of(fold(first) / fold(second)),
   mod: (second) => (first) => of(fold(first) % fold(second))
+}
+
+/**
+ * @category instances
+ * @since 1.0.0
+ */
+export const Show: S.Show<Int8> = {
+  show: (a) => ShowNumber.show(a[0])
 }
 
 /**
