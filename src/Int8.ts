@@ -3,6 +3,7 @@ import * as S from 'fp-ts/Show'
 import * as O from 'fp-ts/Ord'
 import * as B from 'fp-ts/Bounded'
 import * as F from 'fp-ts/Field'
+import { Functor } from 'fp-ts/Functor'
 import { Semigroup } from 'fp-ts/Semigroup'
 import { Monoid } from 'fp-ts/Monoid'
 import { Show as ShowNumber } from 'fp-ts/number'
@@ -38,6 +39,20 @@ export const of = (value: number): Int8 => new Int8Array([value])
 export const fold = (fa: Int8): number => fa[0]
 
 /**
+ * Lift a function number -> number to Int8 -> Int8
+ *
+ * @since 1.0.0
+ */
+export const map: (f: (n: number) => number) => (fa: Int8) => Int8 = (f) => (fa) => of(f(fa[0]))
+
+/**
+ * Lift a function number -> Int8 to Int8 -> Int8
+ *
+ * @since 1.0.0
+ */
+export const chain: (f: (n: number) => Int8) => (fa: Int8) => Int8 = (f) => (fa) => f(fa[0])
+
+/**
  * @category instances
  * @since 1.0.0
  */
@@ -70,11 +85,11 @@ export const Bounded: B.Bounded<Int8> = {
  * @since 1.0.0
  */
 export const Field: F.Field<Int8> = {
-  add: (second) => (first) => of(fold(second) + fold(first)),
+  add: (second) => (first) => of(fold(first) + fold(second)),
   zero: of(0),
-  mul: (second) => (first) => of(fold(second) * fold(first)),
+  mul: (second) => (first) => of(fold(first) * fold(second)),
   one: of(1),
-  sub: (second) => (first) => of(fold(second) - fold(first)),
+  sub: (second) => (first) => of(fold(first) - fold(second)),
   degree: () => 1,
   div: (second) => (first) => of(fold(first) / fold(second)),
   mod: (second) => (first) => of(fold(first) % fold(second))
