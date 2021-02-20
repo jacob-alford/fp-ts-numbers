@@ -2,13 +2,13 @@ import * as E from 'fp-ts/Eq'
 import * as S from 'fp-ts/Show'
 import * as O from 'fp-ts/Ord'
 import * as B from 'fp-ts/Bounded'
+import { negate } from 'fp-ts/Ring'
 import { Semigroup } from 'fp-ts/Semigroup'
 import { Monoid } from 'fp-ts/Monoid'
-import { constant } from 'fp-ts/function'
+import { constant, pipe } from 'fp-ts/function'
 import * as F from './Float'
 import * as Fl from './Floating'
-
-const { add, mul, sub, div, one, zero } = F.Floating
+import { getFieldInfix } from './function'
 
 /**
  * @category model
@@ -31,7 +31,7 @@ export interface Complex {
  * @category constructors
  * @since 3.0.0
  */
-export const of: (a: F.Float) => (b: F.Float) => Complex = (a) => (b) => ({
+export const of: (a: F.Float, b: F.Float) => Complex = (a, b) => ({
   _tag: 'Complex',
   real: a,
   complex: b
@@ -78,17 +78,17 @@ export const fold: <A>(f: (a: F.Float) => (b: F.Float) => A) => (c: Complex) => 
  *
  * @since 1.0.0
  */
-export const map: (fr: (a: F.Float) => F.Float) => (fc: (b: F.Float) => F.Float) => (c: Complex) => Complex = (fr) => (
-  fc
-) => (c) => of(fr(real(c)))(fc(complex(c)))
+export const map: (fr: (a: F.Float) => F.Float, fc: (b: F.Float) => F.Float) => (c: Complex) => Complex = (fr, fc) => (
+  c
+) => of(fr(real(c)), fc(complex(c)))
 
 /**
  * Lift a function number -> number to Float -> Float
  *
  * @since 1.0.0
  */
-export const modulus: (c: Complex) => F.Float = (c) =>
-  F.map(Math.sqrt)(add(mul(real(c))(real(c)))(mul(complex(c))(complex(c))))
+export const modulus: (c: Complex) => F.Float = ({ real: r, complex: c }) =>
+  pipe(_(_(r, '*', r), '+', _(c, '*', c)), F.map(Math.sqrt))
 
 /**
  * @category instances
@@ -114,38 +114,41 @@ export const Ord: O.Ord<Complex> = {
 export const Bounded: B.Bounded<Complex> = {
   equals: Eq.equals,
   compare: Ord.compare,
-  top: of(F.Bounded.top)(F.Bounded.top),
-  bottom: of(F.Bounded.bottom)(F.Bounded.bottom)
+  top: of(F.Bounded.top, F.Bounded.top),
+  bottom: of(F.Bounded.bottom, F.Bounded.bottom)
 }
+
+const _ = getFieldInfix(F.Floating)
 
 /**
  * @category instances
  * @since 1.0.0
  */
 export const Floating: Fl.Floating<Complex> = {
-  add: (second) => (first) => of(add(real(second))(real(first)))(add(complex(second))(complex(first))),
-  zero: of(zero)(zero),
-  mul: (second) => (first) =>
-    ((a, b, c, d) => of(add(mul(a)(c))(mul(b)(d)))(add(mul(b)(c))(mul(a)(d))))(
-      real(first),
-      complex(first),
-      real(second),
-      complex(second)
-    ),
-  one: of(one)(zero),
-  sub: (second) => (first) => of(sub(real(second))(real(first)))(sub(complex(second))(complex(first))),
+  add: ({ real: c, complex: d }) => ({ real: a, complex: b }) => of(_(a, '+', c), _(b, '+', d)),
+  zero: of(F.Floating.zero, F.Floating.zero),
+  mul: ({ real: c, complex: d }) => ({ real: a, complex: b }) =>
+    of(_(_(a, '*', c), '+', _(b, '*', d)), _(_(b, '*', c), '+', _(a, '*', d))),
+  one: of(F.Floating.one, F.Floating.zero),
+  sub: ({ real: c, complex: d }) => ({ real: a, complex: b }) => of(_(a, '-', c), _(b, '-', d)),
   degree: constant(1),
-  div: (second) => (first) =>
-    ((a, b, c, d) =>
-      of(div(add(mul(c)(c))(mul(d)(d)))(add(mul(a)(c))(mul(b)(d))))(
-        div(add(mul(c)(c))(mul(d)(d)))(sub(mul(b)(c))(mul(a)(d)))
-      ))(real(first), complex(first), real(second), complex(second)),
+  div: ({ real: c, complex: d }) => ({ real: a, complex: b }) =>
+    of(
+      _(_(_(a, '*', c), '+', _(b, '*', d)), '/', _(_(c, '*', c), '+', _(d, '*', d))),
+      _(_(_(b, '*', c), '-', _(a, '*', d)), '/', _(_(c, '*', c), '+', _(d, '*', d)))
+    ),
   /* It's weird, but I'm following: https://www.tutorialspoint.com/How-does-modulus-work-with-complex-numbers-in-Python */
-  mod: (second) => (first) =>
-    Floating.sub(first)(Floating.mul(second)(map(F.map(Math.floor))(F.map(Math.floor))(Floating.div(first)(second)))),
+  mod: (y) => (x) =>
+    pipe(
+      Floating.div(x)(y),
+      map(F.map(Math.floor), F.map(Math.floor)),
+      Floating.mul(y),
+      negate(Floating),
+      Floating.add(x)
+    ),
   equals: Eq.equals,
   compare: Ord.compare,
-  abs: (c) => of(F.map(Math.sqrt)(add(mul(real(c))(real(c)))(mul(complex(c))(complex(c)))))(zero)
+  abs: ({ real: r, complex: c }) => of(pipe(_(_(r, '*', r), '+', _(c, '*', c)), F.Floating.abs), F.Floating.zero)
 }
 
 /**
@@ -153,8 +156,8 @@ export const Floating: Fl.Floating<Complex> = {
  * @since 1.0.0
  */
 export const Show: S.Show<Complex> = {
-  show: (a) =>
-    `${F.Show.show(real(a))}${F.sign(complex(a)) === -1 ? '-' : '+'}${F.Show.show(F.map(Math.abs)(complex(a)))}i`
+  show: ({ real: r, complex: c }) =>
+    `${F.Show.show(r)}${F.sign(c) === -1 ? '-' : '+'}${pipe(c, F.Floating.abs, F.Show.show)}i`
 }
 
 /**
